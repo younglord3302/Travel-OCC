@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getDemoCart, setDemoCart } from '@/lib/demo-cart'
+import { getDemoCart, clearDemoCart } from '@/lib/demo-cart'
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions as any)
+    const session = null // Temporarily disable auth for demo purposes
     const body = await request.json()
     const {
       paymentMethodId,
@@ -20,20 +19,8 @@ export async function POST(request: NextRequest) {
 
     // Get cart items
     let cartItems = []
-    if (!session) {
-      // For demo users, get cart from localStorage simulation
-      cartItems = getDemoCart() || []
-    } else {
-      const cart = await prisma.cart.findFirst({
-        where: { userId: session.user.id },
-        include: {
-          items: {
-            include: { product: true }
-          }
-        }
-      })
-      cartItems = cart?.items || []
-    }
+    // For demo purposes, use localStorage simulation
+    cartItems = getDemoCart() || []
 
     if (!cartItems || cartItems.length === 0) {
       return NextResponse.json({ error: 'Cart is empty' }, { status: 400 })
@@ -86,7 +73,7 @@ export async function POST(request: NextRequest) {
     // Create order
     const order = await prisma.order.create({
       data: {
-        userId: session?.user.id || 'demo',
+        userId: 'demo',
         orderNumber,
         status: 'PROCESSING',
         paymentStatus: 'PENDING',
@@ -147,13 +134,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Clear cart
-    if (!session) {
-      setDemoCart([])
-    } else {
-      await prisma.cartItem.deleteMany({
-        where: { cart: { userId: session.user.id } }
-      })
-    }
+    clearDemoCart()
 
     // For demo purposes, simulate payment success
     // In production, you'd wait for actual Stripe webhook or confirmation
